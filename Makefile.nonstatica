@@ -1,0 +1,94 @@
+#----------------------------------------------------------------------------
+#       Macros
+#----------------------------------------------------------------------------
+no_hidden_visibility = 1
+
+CC            = gcc
+CXX           = g++
+LD            = $(CXX) $(CCFLAGS) $(CPPFLAGS)
+AR            = ar
+PICFLAGS      = -fPIC
+CPPFLAGS      = $(PICFLAGS) $(GENFLAGS) -O3 -fomit-frame-pointer -fno-strict-aliasing -Wno-unknown-pragmas -fno-stack-protector -fno-exceptions -funwind-tables -fasynchronous-unwind-tables -fno-rtti -fabi-version=2 -fPIC -isystem $(PIN_ROOT)/extras/stlport/include -isystem $(PIN_ROOT)/extras/libstdc++/include -isystem $(PIN_ROOT)/extras/crt/include -isystem $(PIN_ROOT)/extras/crt/include/arch-x86_64 -isystem $(PIN_ROOT)/extras/crt/include/kernel/uapi -isystem $(PIN_ROOT)/extras/crt/include/kernel/uapi/asm-x86 -fpermissive -std=c++11 -D_REENTRANT -I"$(PIN_ROOT)/source/include" -I"$(PIN_ROOT)/source/include/pin" -I"$(PIN_ROOT)/source/include/pin/gen" -I"$(PIN_ROOT)/extras/components/include" -I"$(PIN_ROOT)/extras/xed-intel64/include" -I"$(PIN_ROOT)/extras/xed-intel64/include/xed" -I"../.." -DBIGARRAY_MULTIPLIER=1 -DUSING_XED -D__PIN__=1 -DPIN_CRT=1 -DTARGET_IA32E -DHOST_IA32E -DFUND_TC_TARGETCPU=FUND_CPU_INTEL64 -DFUND_TC_HOSTCPU=FUND_CPU_INTEL64
+OBJEXT        = .o
+OUTPUT_OPTION = -o "$@"
+COMPILE.c     = $(CC) $(CFLAGS) $(CPPFLAGS) -c
+COMPILE.cc    = $(CXX) $(CCFLAGS) $(CPPFLAGS) -c
+LDFLAGS       = -L"." -L"$(PIN_ROOT)/intel64/lib" -L"$(PIN_ROOT)/intel64/lib-ext" -L"$(PIN_ROOT)/intel64/runtime/pincrt" -L"$(PIN_ROOT)/extras/xed-intel64/lib" -L"../../lib"
+CCC           = $(CXX)
+MAKEFILE      = Makefile.nonstatica
+DEPENDENCIES  = .depend.$(MAKEFILE)
+LTARGETDIR    = ../../lib/
+CAT           = cat
+MV            = mv -f
+RM            = rm -rf
+CP            = cp -p
+NUL           = /dev/null
+MKDIR         = mkdir -p
+TESTDIRSTART  = test -d
+TESTDIREND    = ||
+TOUCH         = touch
+EXEEXT        = 
+LIBPREFIX     = lib
+LIBSUFFIX     = 
+GENFLAGS      = -O
+LDLIBS        = -l"pin++$(LIBSUFFIX)" -l"pin$(LIBSUFFIX)" -l"xed$(LIBSUFFIX)" -ldl $(subst lib,-l,$(sort $(basename $(notdir $(wildcard /usr/lib/librt.so /lib/librt.so))))) -lpthread
+OBJS          = nonstatica$(OBJEXT)
+AREXT         = .a
+LIB           = $(LTARGETDIR)$(LIBPREFIX)nonstatica$(LIBSUFFIX)$(AREXT)
+SOEXT         = .so
+SHTARGETDIR   = ../../lib/
+SHLIB         = $(SHTARGETDIR)$(LIBPREFIX)nonstatica$(LIBSUFFIX)$(SOEXT)
+SHFLAGS       = -shared
+SRC           = nonstatica.cpp
+LINK.cc       = $(LD) $(LDFLAGS)
+EXPORTFLAGS   = $(DYNAMICFLAGS)
+DEPLIBS       = $(foreach lib, pin++$(LIBSUFFIX) pin$(LIBSUFFIX) xed$(LIBSUFFIX) , $(foreach libpath, . $(PIN_ROOT)/intel64/lib $(PIN_ROOT)/intel64/lib-ext $(PIN_ROOT)/intel64/runtime/pincrt $(PIN_ROOT)/extras/xed-intel64/lib ../../lib, $(wildcard $(libpath)/lib$(lib).a)))
+ifeq ($(shell uname -s), Darwin)
+CPPFLAGS += -DTARGET_MAC
+LDFLAGS  += -lpindwarf -lpinpthread -Wl,-exported_symbols_list -Wl,$(PIN_ROOT)/source/include/pin/pintool.exp
+else
+CPPFLAGS += -DTARGET_LINUX -Wl,--hash-style=sysv
+LDLIBS   += -lpin3dwarf -ldl-dynamic -nostdlib -lstlport-dynamic -lm-dynamic -lc-dynamic -lunwind-dynamic
+LDLIBS   := $(filter-out -ldl -lpthread, $(LDLIBS))
+LDFLAGS  += -Wl,-Bsymbolic -Wl,--version-script=$(PIN_ROOT)/source/include/pin/pintool.ver $(PIN_ROOT)/intel64/runtime/pincrt/crtbeginS.o $(PIN_ROOT)/intel64/runtime/pincrt/crtendS.o $(PIN_ROOT)/source/tools/InstLib/obj-intel64/controller.a
+endif
+
+
+#----------------------------------------------------------------------------
+#       Local targets
+#----------------------------------------------------------------------------
+
+all: $(SHLIB)
+
+$(SHLIB): $(OBJS) $(DEPLIBS)
+	@$(TESTDIRSTART) "$(SHTARGETDIR)" $(TESTDIREND) $(MKDIR) "$(SHTARGETDIR)"
+	$(LINK.cc) $(SHFLAGS) $(OBJS) $(LDLIBS) $(OUTPUT_OPTION)
+
+$(LIB): $(OBJS)
+	@$(TESTDIRSTART) "$(LTARGETDIR)" $(TESTDIREND) $(MKDIR) "$(LTARGETDIR)"
+	$(AR) $(ARFLAGS) $(LIB) $(OBJS)
+
+generated: $(GENERATED_DIRTY)
+	@-:
+
+nonstatica$(OBJEXT): nonstatica.cpp
+	$(COMPILE.cc) $(EXPORTFLAGS) $(OUTPUT_OPTION) nonstatica.cpp
+
+clean:
+	-$(RM) $(OBJS)
+
+realclean: clean
+	-$(RM) $(SHLIB) $(LIB)
+
+check-syntax:
+	$(COMPILE.cc) $(EXPORTFLAGS) -Wall -Wextra -pedantic -fsyntax-only $(CHK_SOURCES)
+
+#----------------------------------------------------------------------------
+#       Dependencies
+#----------------------------------------------------------------------------
+
+
+depend:
+	-$(MPC_ROOT)/depgen.pl  $(CFLAGS) $(CCFLAGS) $(CPPFLAGS) -f $(DEPENDENCIES) $(SRC) 2> $(NUL)
+
+-include $(DEPENDENCIES)
